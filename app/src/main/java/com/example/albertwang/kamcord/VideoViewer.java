@@ -108,7 +108,6 @@ public class VideoViewer extends Activity {
 
         mFeedEntryList = new ArrayList<VideoEntry>();
 
-        // TODO: Start the Async task of FeedInformation
         new FeedInformation().execute("https://app.kamcord.com/app/v3/feeds/featured_feed");
     }
 
@@ -122,11 +121,14 @@ public class VideoViewer extends Activity {
             // each data item is just a string in this case
             public ImageView mThumbnailView;
             public TextView mTitleView;
+
             public ViewHolder(View v) {
                 super(v);
                 Log.d(TAG, "Called super from ViewHolder constructor for layout");
                 mThumbnailView = (ImageView) v.findViewById(R.id.feed_entry_thumbnail);
                 mTitleView = (TextView) v.findViewById(R.id.feed_entry_title);
+
+
             }
         }
 
@@ -151,6 +153,14 @@ public class VideoViewer extends Activity {
             Log.d(TAG, "Binding for position:1" + position);
             holder.mThumbnailView.setImageBitmap(videoEntry.thumbnail);
             holder.mTitleView.setText(videoEntry.title);
+            holder.mThumbnailView.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(videoEntry.video_url));
+                    Log.i(TAG, videoEntry.video_url);
+                    startActivity(intent);
+                }
+            });
         }
 
         // Return the size of your dataset (invoked by the layout manager)
@@ -220,6 +230,7 @@ public class VideoViewer extends Activity {
                     Log.i(TAG, next_page);
                     VideoEntry videoEntry = new VideoEntry(thumbnailurl, title, video_url, next_page);
                     mFeedEntryList.add(videoEntry);
+                    // TODO: Need to continue pulling all the feeds!
                 }
             } catch (JSONException e) {}
 
