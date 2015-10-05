@@ -17,20 +17,15 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.provider.MediaStore;
 import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
-import android.support.v7.widget.RecyclerView;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.TextView;
-import android.widget.VideoView;
 
-import org.apache.http.HttpEntity;
-import org.apache.http.HttpResponse;
-import org.apache.http.client.HttpClient;
-import org.apache.http.client.methods.HttpGet;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -84,8 +79,10 @@ public class VideoViewer extends Activity {
     private static final String TAG = "Kamcord";
     private RecyclerView mRecyclerView;
     private RecyclerView.Adapter mAdapter;
-    private RecyclerView.LayoutManager mLayoutManager;
+    private LinearLayoutManager mLayoutManager;
     private ArrayList<VideoEntry> mFeedEntryList;
+    private static final boolean RDBG = false;
+    private static final String feedPageUrl = "https://app.kamcord.com/app/v3/feeds/featured_feed";
     // private Toast mDebugToast;
 
     @Override
@@ -108,7 +105,7 @@ public class VideoViewer extends Activity {
 
         mFeedEntryList = new ArrayList<VideoEntry>();
 
-        new FeedInformation().execute("https://app.kamcord.com/app/v3/feeds/featured_feed");
+        new FeedInformation().execute("");
     }
 
     public class MyAdapter extends RecyclerView.Adapter<MyAdapter.ViewHolder> {
@@ -124,11 +121,8 @@ public class VideoViewer extends Activity {
 
             public ViewHolder(View v) {
                 super(v);
-                Log.d(TAG, "Called super from ViewHolder constructor for layout");
                 mThumbnailView = (ImageView) v.findViewById(R.id.feed_entry_thumbnail);
                 mTitleView = (TextView) v.findViewById(R.id.feed_entry_title);
-
-
             }
         }
 
@@ -142,7 +136,6 @@ public class VideoViewer extends Activity {
             // set the view's size, margins, paddings and layout parameters
             // mViewHolder = new ViewHolder(todo_view, due_view, comment_view, estimatedCompletionTime_view);
             mViewHolder = new ViewHolder(feed_entry);
-            Log.d(TAG, "Finished onCreate");
             return mViewHolder;
         }
 
@@ -150,7 +143,6 @@ public class VideoViewer extends Activity {
         @Override
         public void onBindViewHolder(ViewHolder holder, int position) {
             final VideoEntry videoEntry = mFeedEntryList.get(position);
-            Log.d(TAG, "Binding for position:1" + position);
             holder.mThumbnailView.setImageBitmap(videoEntry.thumbnail);
             holder.mTitleView.setText(videoEntry.title);
             holder.mThumbnailView.setOnClickListener(new View.OnClickListener() {
@@ -171,80 +163,88 @@ public class VideoViewer extends Activity {
     }
 
 
-    private class FeedInformation extends AsyncTask<String, Void, ArrayList<VideoEntry>> {
-        protected ArrayList<VideoEntry> doInBackground(String... feedUrl) {
-            // String feedUrlString = "https://app.kamcord.com/app/v3/feeds/featured_feed";
+    private class FeedInformation extends AsyncTask<String, Void, String> {
+
+        protected String doInBackground(String... pageUrl) {
             HttpURLConnection connection = null;
             StringBuilder response = new StringBuilder();
-            try {
-                URL url = new URL(feedUrl[0]);
-                connection = (HttpURLConnection) url.openConnection();
-                connection.setRequestMethod("GET");
-                connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
-                connection.setRequestProperty("device-token", "Hello");
-                connection.setUseCaches(false);
-                connection.setDoOutput(false);
+            String next_page = "";
+            URL url;
 
-                // Send Request
-                // DataOutputStream wr = new DataOutputStream(connection.getOutputStream());
-                // wr.close();
+                try {
+                    if (pageUrl[0].equals("")) {
+                        url = new URL(feedPageUrl);
+                    } else {
+                        url = new URL(feedPageUrl + "?page=" + pageUrl[0]);
+                    }
 
-                // Get Response
-                InputStream is = connection.getInputStream();
-                BufferedReader rd = new BufferedReader(new InputStreamReader(is));
-                String line;
+                    connection = (HttpURLConnection) url.openConnection();
+                    connection.setRequestMethod("GET");
+                    connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+                    connection.setRequestProperty("device-token", "Hello");
+                    connection.setUseCaches(false);
+                    connection.setDoOutput(false);
 
-                while ((line = rd.readLine()) != null) {
-                    response.append(line);
-                    response.append("\n");
-                    Log.i("albewang", line);
+                    // Get Response
+                    InputStream is = connection.getInputStream();
+                    BufferedReader rd = new BufferedReader(new InputStreamReader(is));
+                    String line;
+
+                    while ((line = rd.readLine()) != null) {
+                        response.append(line);
+                        response.append("\n");
+                    }
+
+                    rd.close();
+
+                } catch(Exception e){
+                    e.printStackTrace();
+                } finally{
+                    if (connection != null) {
+                        connection.disconnect();
+                    }
                 }
-                rd.close();
-            } catch (Exception e) {
-                e.printStackTrace();
-            } finally {
-                if (connection != null) {
-                    connection.disconnect();
+
+                if (response.toString().isEmpty()) {
+                    Log.i(TAG, "Returning null early!");
+                    return null;
                 }
-            }
 
-            if (response.toString().isEmpty()) {
-                Log.i(TAG, "Returning null early!");
-                return null;
-            }
-
-            Log.i(TAG, "Unparsing JSON");
-
-            try {
-                JSONObject jsonObject = new JSONObject(response.toString());
-                Log.i(TAG, jsonObject.getJSONObject("status").getString("status_reason"));
-                JSONArray jsonArray = jsonObject.getJSONObject("response").getJSONObject("video_list").getJSONArray("video_list");
-                for (int i = 0; i < jsonArray.length(); i++) {
-                    String thumbnailurl = jsonArray.getJSONObject(i).getJSONObject("thumbnails").getString("regular");
-                    String title = jsonArray.getJSONObject(i).getString("title");
-                    String video_url = jsonArray.getJSONObject(i).getString("video_url");
-                    String next_page = jsonObject.getJSONObject("response").getJSONObject("video_list").getString("next_page");
-                    Log.i(TAG, thumbnailurl);
-                    Log.i(TAG, title);
-                    Log.i(TAG, video_url);
-                    Log.i(TAG, next_page);
-                    VideoEntry videoEntry = new VideoEntry(thumbnailurl, title, video_url, next_page);
-                    mFeedEntryList.add(videoEntry);
-                    // TODO: Need to continue pulling all the feeds!
+                try {
+                    JSONObject jsonObject = new JSONObject(response.toString());
+                    Log.i(TAG, jsonObject.getJSONObject("status").getString("status_reason"));
+                    JSONArray jsonArray = jsonObject.getJSONObject("response").getJSONObject("video_list").getJSONArray("video_list");
+                    for (int i = 0; i < jsonArray.length(); i++) {
+                        String thumbnailurl = jsonArray.getJSONObject(i).getJSONObject("thumbnails").getString("regular");
+                        String title = jsonArray.getJSONObject(i).getString("title");
+                        String video_url = jsonArray.getJSONObject(i).getString("video_url");
+                        next_page = jsonObject.getJSONObject("response").getJSONObject("video_list").getString("next_page");
+                        if (RDBG) {
+                            // Log.i(TAG, thumbnailurl);
+                            // Log.i(TAG, title);
+                            // Log.i(TAG, video_url);
+                            Log.i(TAG, next_page);
+                        }
+                        VideoEntry videoEntry = new VideoEntry(thumbnailurl, title, video_url, next_page);
+                        mFeedEntryList.add(videoEntry);
+                    }
+                } catch (JSONException e) {
                 }
-            } catch (JSONException e) {}
-
-            return new ArrayList<VideoEntry>();
-
-            // Todo: Go through JSON list and create an ArrayList of VideoEntries
-            // TODO: Each time the thumbnail gets downloaded:
-            // TODO: (1) Generate the VideoEntry
-            // TODO: (2) Notify the UI thread to update the RecyclerView
-            // TOOD: (3) Add to ArrayList
+            return next_page;
         }
 
-        protected void onPostExecute(ArrayList arr) {
-            // mAdapter.notifyDataSetChanged();
+        public void onPostExecute(final String nextpage) {
+            mRecyclerView.setOnScrollListener(new RecyclerView.OnScrollListener() {
+                @Override
+                public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
+                    super.onScrolled(recyclerView, dx, dy);
+                    int lastposition = mLayoutManager.findLastVisibleItemPosition();
+                    int lastEntry = mFeedEntryList.size() - 1;
+                    if (lastposition == lastEntry && nextpage != null) {
+                        new FeedInformation().execute(nextpage);
+                    }
+                }
+            });
         }
     }
 
@@ -258,11 +258,13 @@ public class VideoViewer extends Activity {
             this.title = title;
             this.video_url = video_url;
             this.next_page = next_page;
+            Thread.currentThread().setPriority(Thread.MIN_PRIORITY);
             new ThumbnailLoad().execute(bitmap_url);
         }
 
         private class ThumbnailLoad extends AsyncTask<String, Void, Bitmap> {
             protected Bitmap doInBackground(String... bitmap_url) {
+                Thread.currentThread().setPriority(Thread.MAX_PRIORITY);
                 try {
                     URL url = new URL(bitmap_url[0]);
                     HttpURLConnection connection = (HttpURLConnection) url.openConnection();
@@ -278,25 +280,10 @@ public class VideoViewer extends Activity {
             protected void onPostExecute(Bitmap bmp) {
                 if (bmp != null) {
                     thumbnail = bmp;
+                    Log.i(TAG, "Bitmap width:"+bmp.getWidth() + " height:"+bmp.getHeight());
                 }
                 mAdapter.notifyDataSetChanged();
             }
         }
-    }
-
-
-
-    public void launchVideo(View v) {
-        /*
-        String url = "http://www.sample-videos.com/video/mp4/720/big_buck_bunny_720p_1mb.mp4";
-        VideoView vidView = (VideoView) findViewById(R.id.video);
-        Uri vidUri = Uri.parse(url);
-        vidView.setVideoURI(vidUri);
-        vidView.start();
-        */
-        String feedUrlString =  "https://app.kamcord.com/app/v3/feeds/featured_feed";
-
-
-
     }
 }
